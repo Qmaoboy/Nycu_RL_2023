@@ -59,7 +59,6 @@ def value_iteration(env, gamma=0.9, max_iterations=10**6, eps=10**-3):
     policy = np.array([env.action_space.sample() for _ in range(num_spaces)])
     
     ##### FINISH TODOS HERE #####
-    
     R,P =get_rewards_and_transitions_from_env(env)
     V=np.zeros((num_spaces))
     for i in range(max_iterations):
@@ -118,12 +117,38 @@ def policy_iteration(env, gamma=0.9, max_iterations=10**6, eps=10**-3):
     policy = np.array([env.action_space.sample() for _ in range(num_spaces)])
     
     ##### FINISH TODOS HERE #####
+    _policy=policy.copy()
     R,P =get_rewards_and_transitions_from_env(env)
-    
-    
-    
-    
-    
+    V=np.zeros((num_spaces))
+    while (policy-_policy).any():
+        _policy=policy.copy()
+        
+        # Value evaluation
+        for i in range(max_iterations):
+            delta=0
+            _v=V.copy()
+            for j in range(num_spaces):
+                value=0
+                for s2 in range(num_spaces):
+                    value+=R[j][policy[s]][s2]+gamma*P[j][policy[s]][s2]*_v[s2]
+                V[s2]=value
+                delta=max(delta,abs(V[s]-_v[s]))
+            if delta<eps:
+                break
+        
+        # Policy evaluation
+        for i in range(num_spaces):
+            maxv,maxa=0,0
+            for s in range(num_actions):
+                val=0
+                for s2 in range(num_spaces):
+                    val+=R[j][s][s2]+gamma*P[j][s][s2]*V[s2]
+                if val>maxv:
+                    maxv=val
+                    maxa=a
+            policy[s]=a
+            
+
     #############################
 
     # Return optimal policy
