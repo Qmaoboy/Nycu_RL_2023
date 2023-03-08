@@ -1,2 +1,4 @@
-# 2023_Nycu_reinforcement_learning_therory
-2023 Nycu Reinforcement Learning course project
+# 2023_Nycu_RL
+Description : 2023 Nycu Reinforcement Learning course project
+
+
