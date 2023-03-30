@@ -288,5 +288,5 @@ if __name__ == '__main__':
     env = gym.make('CartPole-v0')
     env.seed(random_seed)  
     torch.manual_seed(random_seed)  
-    # train(lr)
+    train(lr)
     test(f'CartPole_{lr}.pth')

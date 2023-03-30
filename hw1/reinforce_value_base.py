@@ -142,20 +142,22 @@ class Policy(nn.Module):
       
         ########## YOUR CODE HERE (8-15 lines) ##########
         for logporb,state_value in saved_actions:
+            # print(state_value[0])
             val.append(state_value)
             act.append(logporb)
         
         for t in reversed(range(len(self.rewards))):
             R=self.rewards[t]+R*gamma
             returns.insert(0,R)
-        
+        returns=torch.tensor(returns,dtype=torch.float32)
+        returns =(returns -returns.mean())/returns.std()
         
         for t in range(len(self.rewards)):
-            policy_losses.append((returns[t]-val[t].detach())*act[t])
-            value_losses.append(F.huber_loss(torch.tensor(returns[t],dtype=torch.float32),val[t],delta=0.5))
-            
-        # returns=torch.tensor(returns)    
-        # val=torch.tensor(val)
+            # print(returns[t]-val[t][0].detach())
+            policy_losses.append(((returns[t]-val[t].detach())*act[t])[0])
+            # value_losses.append(F.huber_loss(torch.tensor(returns[t],dtype=torch.float32),val[t],delta=0.5))
+            value_losses.append(F.huber_loss(returns[t],val[t],delta=0.5))
+
 
         loss = -torch.stack(policy_losses).sum()+torch.stack(value_losses).sum()
         print(torch.stack(value_losses).mean().item(),end="")
@@ -204,7 +206,7 @@ def train(lr=0.01):
     optimizer = optim.Adam(model.parameters(), lr=lr)
     
     # Learning rate scheduler (optional)
-    scheduler = Scheduler.StepLR(optimizer, step_size=300, gamma=0.9)
+    scheduler = Scheduler.StepLR(optimizer, step_size=400, gamma=0.9)
     
     # EWMA reward for tracking the learning progress
     ewma_reward = 0
@@ -246,9 +248,9 @@ def train(lr=0.01):
         print('Episode {}\tlength: {}\treward: {}\t ewma reward: {}'.format(i_episode, t, ep_reward, ewma_reward))
         #Try to use Tensorboard to record the behavior of your implementation 
         ########## YOUR CODE HERE (4-5 lines) ##########
-        writer.add_scalar("Vanilla RL Loss",loss,i_episode)
-        writer.add_scalar("Vanilla RL Ewma reward",ewma_reward,i_episode)
-        writer.add_scalar("Vanilla RL Step reward",ep_reward,i_episode)
+        writer.add_scalar("Loss",loss,i_episode)
+        writer.add_scalar("RL Ewma reward",ewma_reward,i_episode)
+        writer.add_scalar("Step reward",ep_reward,i_episode)
         writer.add_scalar("Vanilla learning Rate",scheduler.get_lr()[0],i_episode)
         model.clear_memory()
         ########## END OF YOUR CODE ##########
@@ -281,8 +283,8 @@ def test(name, n_episodes=10):
             action = model.select_action(state)
             state, reward, done, _ = env.step(action)
             running_reward += reward
-            # if render:
-                # env.render()
+            if render:
+                env.render()
                 # frame.append(env.render(mode="rgb_array"))
             if done:
                 break
@@ -294,7 +296,7 @@ def test(name, n_episodes=10):
 if __name__ == '__main__':
     # For reproducibility, fix the random seed
     random_seed = 10  
-    lr = 0.005
+    lr = 0.006
     env = gym.make('LunarLander-v2')
     env.seed(random_seed)  
     torch.manual_seed(random_seed)  

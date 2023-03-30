@@ -119,28 +119,37 @@ class Policy(nn.Module):
         policy_losses = [] 
         value_losses = [] 
         returns = []
-        state_value=[]
-        for _,j in self.saved_actions:
-            state_value.append(j)
-        A =GAE(gamma=0.99,lambda_=0.95,num_steps=None)
-        advantages=A(self.rewards,state_value,done=0)
-        
-        # print(advantages)
+        val=[]
+        act=[]
+        advan=[]
+        for logprob,state_calue in saved_actions:
+            val.append(state_calue[0])
+            act.append(logprob)
+            
         ########## YOUR CODE HERE (8-15 lines) ##########
         for t in reversed(range(len(self.rewards))):
             R=self.rewards[t]+R*gamma
             returns.insert(0,R)
-        returns=torch.tensor(returns)
+        returns=torch.tensor(returns,dtype=torch.float32)
+        retunrs =(returns -returns.mean())/returns.std()
         
-        for t in range(len(self.rewards)):
-            policy_losses.append(advantages[t]*saved_actions[t][0])
-            value_losses.append(advantages[t].pow(2))
+        A =GAE(0.99,0.95,0)
+        advantages=A(self.rewards,val,0)
+        
+        for ad in advantages:
+            advan.append(ad.detach())
             
+        for t in range(len(self.rewards)):
+            policy_losses.append(advan[t]*act[t])
+            # value_losses.append(F.huber_loss(returns[t],val[t],delta=1))
+            value_losses.append(advan[t].pow(2))
+            # print(policy_losses)
+            # print(value_losses)
     
-        loss = -torch.stack(policy_losses).sum()+torch.stack(value_losses).sum()
-        
+        loss= -torch.stack(policy_losses).sum()+torch.stack(value_losses).sum()
+        # print(torch.stack(value_losses).mean().item(),end="")
         ########## END OF YOUR CODE ##########
-        
+        # print(loss)
         return loss
 
     def clear_memory(self):
@@ -167,15 +176,16 @@ class GAE:
         next_value=0
         advantage=0
         advantages=[]
+
         for r,v in zip(reversed(rewards),reversed(values)):
-            td_error =r+next_value*self.gamma*self.lambda_
+            td_error =r+next_value*self.gamma-v
             advantage=td_error+advantage*self.gamma*self.lambda_
             next_value=v
-            advantages.insert(0,advantage)
+            advantages.insert(0,advantage.detach())
             if done:
                 break
-        advantages = torch.tensor(advantages)
-        
+        advantages=torch.tensor(advantages)
+        advantages = (advantages - advantages.mean()) / advantages.std()
         return advantages
         ########## END OF YOUR CODE ##########
 
@@ -195,7 +205,7 @@ def train(lr=0.01):
     optimizer = optim.Adam(model.parameters(), lr=lr)
     
     # Learning rate scheduler (optional)
-    scheduler = Scheduler.StepLR(optimizer, step_size=100, gamma=0.9)
+    scheduler = Scheduler.StepLR(optimizer, step_size=500, gamma=0.9)
     
     # EWMA reward for tracking the learning progress
     ewma_reward = 0
@@ -282,7 +292,7 @@ def test(name, n_episodes=10):
 if __name__ == '__main__':
     # For reproducibility, fix the random seed
     random_seed = 10  
-    lr = 0.001
+    lr = 0.005
     env = gym.make('LunarLander-v2')
     env.seed(random_seed)  
     torch.manual_seed(random_seed)  
