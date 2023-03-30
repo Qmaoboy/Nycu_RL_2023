@@ -146,7 +146,8 @@ class Policy(nn.Module):
             # print(policy_losses)
             # print(value_losses)
     
-        loss= -torch.stack(policy_losses).sum()+torch.stack(value_losses).sum()
+        loss= -torch.stack(policy_losses).sum()
+        #+torch.stack(value_losses).sum()
         # print(torch.stack(value_losses).mean().item(),end="")
         ########## END OF YOUR CODE ##########
         # print(loss)
