@@ -26,8 +26,7 @@ def hard_update(target, source):
     for target_param, param in zip(target.parameters(), source.parameters()):
         target_param.data.copy_(param.data)
 
-Transition = namedtuple(
-    'Transition', ('state', 'action', 'mask', 'next_state', 'reward'))
+Transition = namedtuple('Transition', ('state', 'action', 'mask', 'next_state', 'reward'))
 
 class ReplayMemory(object):
 
@@ -73,14 +72,13 @@ class Actor(nn.Module):
         super(Actor, self).__init__()
         self.action_space = action_space
         num_outputs = action_space.shape[0]
-
         ########## YOUR CODE HERE (5~10 lines) ##########
         # Construct your own actor network
         self.ac=nn.Sequential(
             nn.Linear(num_inputs,hidden_size),
-            nn.LeakyReLU(),
+            nn.ReLU(),
             nn.Linear(hidden_size,num_outputs),
-            nn.tanh(), ## [-1,1]
+            nn.Sigmoid()
         )
         ########## END OF YOUR CODE ##########
 
@@ -88,9 +86,9 @@ class Actor(nn.Module):
 
         ########## YOUR CODE HERE (5~10 lines) ##########
         # Define the forward pass your actor network
-        act_prob=self.ac(torch.tensor(inputs))
-
-        return act_prob ##return action
+        scale=torch.tensor(self.action_space.high-self.action_space.low)
+        act_prob=self.ac(inputs)
+        return act_prob*scale+torch.tensor(self.action_space.low)
         ########## END OF YOUR CODE ##########
 
 class Critic(nn.Module):
@@ -155,20 +153,15 @@ class DDPG(object):
         self.actor.eval()
         mu = self.actor((Variable(state)))
         mu = mu.data
-
         ########## YOUR CODE HERE (3~5 lines) ##########
         # Add noise to your action for exploration
         # Clipping might be needed
-        actrion_=mu+action_noise
-        action_prob=torch.clamp(actrion_,min=-0.5,max=0.5)  ### 對 Probability 做 clip
-        num_action=1
-        action=torch.multinomial(action_prob,num_action,replacement=False)
-
-        action_prob=torch.gather(action_prob,dim=1,index=action)
-        logp=action_prob.log()
-        print(logp)
-
-        return action
+        if action_noise!=None:
+            actrion_=mu+torch.tensor(action_noise)
+        else :
+            actrion_=mu
+        action_prob=torch.clamp(actrion_,min=torch.tensor(self.action_space.low),max=torch.tensor(self.action_space.high))  ### 對 Probability 做 clip
+        return action_prob
         ########## END OF YOUR CODE ##########
 
 
@@ -182,20 +175,23 @@ class DDPG(object):
         ########## YOUR CODE HERE (10~20 lines) ##########
         # Calculate policy loss and value loss
         # Update the actor and the critic
-        self.actor.zero_grad()
-        self.critic.zero_grad()
+
+
         ### critic update
+        self.critic.zero_grad()
         a_=self.actor_target(next_state_batch)
         y=reward_batch+self.gamma*self.critic_target(next_state_batch,a_)
         q=self.critic(state_batch,action_batch)
-        policy_loss=nn.MSELoss(y,q) ## policy loss
+        # policy_loss=nn.MSELoss(y,q) ## policy loss
+        policy_loss=F.huber_loss(y, q,delta=1) ## policy loss
         policy_loss.backward()
         self.critic_optim.step()
 
         ### actor update
+        self.actor.zero_grad()
         a=self.actor(state_batch)
         q=self.critic(state_batch,a)
-        value_loss=-torch.mean(a_q) ## value loss
+        value_loss=-torch.mean(q) ## value loss
         value_loss.backward()
         self.actor_optim.step()
 
@@ -248,7 +244,6 @@ def train():
     agent = DDPG(env.observation_space.shape[0], env.action_space, gamma, tau, hidden_size)
     ounoise = OUNoise(env.action_space.shape[0])
     memory = ReplayMemory(replay_size)
-    return
     for i_episode in range(num_episodes):
 
         ounoise.scale = noise_scale
@@ -258,27 +253,27 @@ def train():
 
         episode_reward = 0
         while True:
-
             ########## YOUR CODE HERE (15~25 lines) ##########
             # 1. Interact with the env to get new (s,a,r,s') samples
             # 2. Push the sample to the replay buffer
             # 3. Update the actor and the critic
-            initstate=0
-            trojactory=Transition([],[],[],[],[])
+            action = agent.select_action(state,action_noise=ounoise.noise())
+            next_state, reward, done, _ = env.step(action)
+            episode_reward+=reward
+            reward/=10
+            next_state=torch.tensor(next_state)
+            action=torch.tensor(action)
+            memory.push(state,action,done,next_state,reward)
+            total_numsteps+=1
+            if done:
+                break
+            elif total_numsteps%updates_per_step==0 and total_numsteps>replay_size:
+                sample_tran=memory.sample(batch_size)
+                trans=Transition([],[],[],[],[])
 
-            state=memory.sample(batch_size)
-            action=agent.select_action(state)
-            state, reward,done,_ =env.step(action)
-
-
-
-
-                # a = actor.choose_action(s)
-                # s_,r,done,info = env.step(a)
-                # td_error = critic.learn(s,r,s_)
-                # actor.learn(s,a,td_error)
-                # s = s_
-
+                agent.update_parameters(trans)
+            else:
+                state=next_state
 
             ########## END OF YOUR CODE ##########
 
@@ -318,7 +313,7 @@ if __name__ == '__main__':
     # For reproducibility, fix the random seed
     random_seed = 10
     #env = gym.make('LunarLanderContinuous-v2')
-    env = gym.make('Pendulum-v0')
+    env = gym.make('Pendulum-v1')
     env.seed(random_seed)
     torch.manual_seed(random_seed)
     train()
