@@ -159,12 +159,15 @@ class DDPG(object):
         ########## YOUR CODE HERE (3~5 lines) ##########
         # Add noise to your action for exploration
         # Clipping might be needed
-        mu+=action_noise
-        action_prob=torch.clamp(mu,min=-0.5,max=0.5)  ### 對 Probability 做 clip
+        actrion_=mu+action_noise
+        action_prob=torch.clamp(actrion_,min=-0.5,max=0.5)  ### 對 Probability 做 clip
         num_action=1
         action=torch.multinomial(action_prob,num_action,replacement=False)
+
         action_prob=torch.gather(action_prob,dim=1,index=action)
         logp=action_prob.log()
+        print(logp)
+
         return action
         ########## END OF YOUR CODE ##########
 
@@ -179,9 +182,22 @@ class DDPG(object):
         ########## YOUR CODE HERE (10~20 lines) ##########
         # Calculate policy loss and value loss
         # Update the actor and the critic
+        self.actor.zero_grad()
+        self.critic.zero_grad()
+        ### critic update
+        a_=self.actor_target(next_state_batch)
+        y=reward_batch+self.gamma*self.critic_target(next_state_batch,a_)
+        q=self.critic(state_batch,action_batch)
+        policy_loss=nn.MSELoss(y,q) ## policy loss
+        policy_loss.backward()
+        self.critic_optim.step()
 
-
-
+        ### actor update
+        a=self.actor(state_batch)
+        q=self.critic(state_batch,a)
+        value_loss=-torch.mean(a_q) ## value loss
+        value_loss.backward()
+        self.actor_optim.step()
 
         ########## END OF YOUR CODE ##########
 
@@ -232,7 +248,7 @@ def train():
     agent = DDPG(env.observation_space.shape[0], env.action_space, gamma, tau, hidden_size)
     ounoise = OUNoise(env.action_space.shape[0])
     memory = ReplayMemory(replay_size)
-
+    return
     for i_episode in range(num_episodes):
 
         ounoise.scale = noise_scale
@@ -247,13 +263,22 @@ def train():
             # 1. Interact with the env to get new (s,a,r,s') samples
             # 2. Push the sample to the replay buffer
             # 3. Update the actor and the critic
+            initstate=0
+            trojactory=Transition([],[],[],[],[])
+
+            state=memory.sample(batch_size)
+            action=agent.select_action(state)
             state, reward,done,_ =env.step(action)
+
+
+
+
                 # a = actor.choose_action(s)
                 # s_,r,done,info = env.step(a)
                 # td_error = critic.learn(s,r,s_)
                 # actor.learn(s,a,td_error)
                 # s = s_
-            update_parameters(batch_size)
+
 
             ########## END OF YOUR CODE ##########
 
