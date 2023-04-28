@@ -120,10 +120,12 @@ class Critic(nn.Module):
         ########## YOUR CODE HERE (5~10 lines) ##########
         # Define the forward pass your critic network
         # print("critic forward")
+        # print(inputs.shape)
+        # print(actions.shape)
         statelayer=self.state_(inputs)
         actionlayer=self.action_(actions)
         state_action=torch.cat((statelayer,actionlayer),dim=1)
-
+        # print(state_action.shape)
         Q_value=self.final(state_action)
         return Q_value ## return Q value for update actor
         ########## END OF YOUR CODE ##########
@@ -162,7 +164,8 @@ class DDPG(object):
             actrion_=mu+torch.tensor(action_noise)
         else :
             actrion_=mu
-        action_prob=torch.clamp(actrion_,min=torch.tensor(self.action_space.low),max=torch.tensor(self.action_space.high))  ### 對 Probability 做 clip
+        action_prob=torch.clip(actrion_,min=torch.tensor(self.action_space.low),max=torch.tensor(self.action_space.high))  ### 對 Probability 做 clip
+
         return action_prob
         ########## END OF YOUR CODE ##########
 
@@ -179,11 +182,9 @@ class DDPG(object):
         # Update the actor and the critic
 
         ### critic update
-        state_batch=state_batch.reshape(3,-1).T
-        next_state_batch=next_state_batch.reshape(3,-1).T
-        action_batch=action_batch.reshape(128,-1)
-        print(state_batch.shape)
-        print(next_state_batch.shape)
+        # state_batch=state_batch.reshape(3,-1).T
+        # next_state_batch=next_state_batch.reshape(3,-1).T
+        # action_batch=action_batch.reshape(128,-1)
 
         self.critic.zero_grad()
         self.actor.zero_grad()
@@ -191,10 +192,11 @@ class DDPG(object):
         a_=self.actor_target(next_state_batch)
         # print(a_)
         y=reward_batch+self.gamma*self.critic_target(next_state_batch,a_)
-        print(action_batch)
+        # print(state_batch.dtype)
+        # print(action_batch.dtype)
         q=self.critic(state_batch,action_batch)
-        policy_loss=F.mse_loss(y, q) ## policy loss
-        # policy_loss=F.huber_loss(y, q,delta=1) ## policy loss
+        # policy_loss=F.mse_loss(y, q) ## policy loss
+        policy_loss=F.huber_loss(y.to(torch.float64), q.to(torch.float64),delta=1) ## policy loss
         policy_loss.backward()
         self.critic_optim.step()
 
@@ -211,7 +213,6 @@ class DDPG(object):
         soft_update(self.critic_target, self.critic, self.tau)
 
         return value_loss.item(), policy_loss.item()
-
 
     def save_model(self, env_name, suffix="", actor_path=None, critic_path=None):
         local_time = time.localtime()
@@ -236,13 +237,13 @@ class DDPG(object):
 
 def train():
     num_episodes = 200
-    gamma = 0.995
+    gamma = 0.99
     tau = 0.002
     hidden_size = 128
-    noise_scale = 0.3
+    noise_scale = 0.1
     replay_size = 100000
     batch_size = 128
-    updates_per_step = 1
+    updates_per_step = 3
     print_freq = 1
     ewma_reward = 0
     rewards = []
@@ -267,18 +268,18 @@ def train():
             # 1. Interact with the env to get new (s,a,r,s') samples
             # 2. Push the sample to the replay buffer
             # 3. Update the actor and the critic
-            state=state.reshape(-1)
-            action = agent.select_action(state,action_noise=ounoise.noise())
+            action = agent.select_action(state,action_noise=ounoise.noise()).numpy()[0]
+            # print(action)
             next_state, reward, done, _ = env.step(action)
-            episode_reward+=reward
             reward/=10
-            next_state=torch.tensor(next_state)
-            action=torch.tensor(action).to(float)
+            episode_reward+=reward
+            next_state=torch.tensor([next_state])
+            action=torch.tensor([action],dtype=torch.float32)
+
             memory.push(state,action,torch.tensor([done]),next_state,torch.tensor([reward]))
             total_numsteps+=1
-            if done:
-                break
-            elif total_numsteps%updates_per_step==0 and total_numsteps>200:
+
+            if total_numsteps%updates_per_step==0 and total_numsteps>1000:
                 sample_tran=memory.sample(batch_size)
                 batch=Transition([],[],[],[],[])
                 for i in sample_tran:
@@ -287,10 +288,10 @@ def train():
                     batch.mask.append(i.mask)
                     batch.next_state.append(i.next_state)
                     batch.reward.append(i.reward)
-                # print(torch.cat(batch.state,dim=0).shape)
                 agent.update_parameters(batch)
             state=next_state
-
+            if done:
+                break
             ########## END OF YOUR CODE ##########
         print(total_numsteps)
 
