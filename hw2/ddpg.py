@@ -132,7 +132,7 @@ class Critic(nn.Module):
 
 
 class DDPG(object):
-    def __init__(self, num_inputs, action_space, gamma=0.995, tau=0.0005, hidden_size=128, lr_a=1e-4, lr_c=1e-3):
+    def __init__(self, num_inputs, action_space, gamma=0.995, tau=0.0005, hidden_size=128, lr_a=1e-6, lr_c=1e-5):
 
         self.num_inputs = num_inputs
         self.action_space = action_space
@@ -182,9 +182,6 @@ class DDPG(object):
         # Update the actor and the critic
 
         ### critic update
-        # state_batch=state_batch.reshape(3,-1).T
-        # next_state_batch=next_state_batch.reshape(3,-1).T
-        # action_batch=action_batch.reshape(128,-1)
 
         self.critic.zero_grad()
         self.actor.zero_grad()
@@ -196,7 +193,8 @@ class DDPG(object):
         # print(action_batch.dtype)
         q=self.critic(state_batch,action_batch)
         # policy_loss=F.mse_loss(y, q) ## policy loss
-        policy_loss=F.huber_loss(y.to(torch.float64), q.to(torch.float64),delta=1) ## policy loss
+        policy_loss=F.huber_loss(y.to(torch.float64), q.to(torch.float64),delta=0.3) ## policy loss
+        # print(policy_loss)
         policy_loss.backward()
         self.critic_optim.step()
 
@@ -204,6 +202,7 @@ class DDPG(object):
         a=self.actor(state_batch)
         q=self.critic(state_batch,a)
         value_loss=-torch.mean(q) ## value loss
+        # print(value_loss)
         value_loss.backward()
         self.actor_optim.step()
 
@@ -237,13 +236,13 @@ class DDPG(object):
 
 def train():
     num_episodes = 200
-    gamma = 0.99
-    tau = 0.002
+    gamma = 0.995
+    tau = 0.03
     hidden_size = 128
-    noise_scale = 0.1
-    replay_size = 100000
-    batch_size = 128
-    updates_per_step = 3
+    noise_scale = 0.3
+    replay_size = 1000000
+    batch_size = 512
+    updates_per_step = 5
     print_freq = 1
     ewma_reward = 0
     rewards = []
@@ -279,7 +278,7 @@ def train():
             memory.push(state,action,torch.tensor([done]),next_state,torch.tensor([reward]))
             total_numsteps+=1
 
-            if total_numsteps%updates_per_step==0 and total_numsteps>1000:
+            if total_numsteps%updates_per_step==0 and total_numsteps>batch_size*updates_per_step:
                 sample_tran=memory.sample(batch_size)
                 batch=Transition([],[],[],[],[])
                 for i in sample_tran:
@@ -293,7 +292,7 @@ def train():
             if done:
                 break
             ########## END OF YOUR CODE ##########
-        print(total_numsteps)
+        # print(total_numsteps)
 
         rewards.append(episode_reward)
         t = 0
@@ -323,7 +322,7 @@ def train():
             ewma_reward_history.append(ewma_reward)
             print("Episode: {}, length: {}, reward: {:.2f}, ewma reward: {:.2f}".format(i_episode, t, rewards[-1], ewma_reward))
 
-    agent.save_model(env_name, '.pth')
+    agent.save_model('Pendulum-v1', '.pth')
 
 
 if __name__ == '__main__':
