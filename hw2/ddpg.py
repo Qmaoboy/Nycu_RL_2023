@@ -26,6 +26,11 @@ def hard_update(target, source):
     for target_param, param in zip(target.parameters(), source.parameters()):
         target_param.data.copy_(param.data)
 
+def fanin_init(size, fanin=None):
+    fanin = fanin or size[0]
+    v = 1. / np.sqrt(fanin)
+    return torch.Tensor(size).uniform_(-v, v)
+
 Transition = namedtuple('Transition', ('state', 'action', 'mask', 'next_state', 'reward'))
 
 class ReplayMemory(object):
@@ -77,19 +82,49 @@ class Actor(nn.Module):
         self.ac=nn.Sequential(
             nn.Linear(num_inputs,hidden_size), ## 3 * 128
             nn.ReLU(),
+            # nn.Linear(hidden_size,hidden_size), ## 128 * 128
+            # nn.ReLU(),
             nn.Linear(hidden_size,num_outputs), ## 128 * 1
-            nn.Sigmoid()
+            nn.ReLU(),
+            nn.Sigmoid(),
         )
-        ########## END OF YOUR CODE ##########
+        for idx,m in enumerate(self.modules()):
+            # print(idx,m)
+            # print("########################################")
+            if idx==4:
+                print(m)
+                nn.init.uniform_(m.weight,a=-3e-3,b=3e-3)
 
+        ##############################################################
+    #     self.fc1 = nn.Linear(num_inputs, hidden_size)
+    #     self.fc2 = nn.Linear(hidden_size, hidden_size)
+    #     self.fc3 = nn.Linear(hidden_size, num_outputs)
+    #     self.relu = nn.ReLU()
+    #     self.tanh = nn.Tanh()
+    #     self.init_weights(3e-3)
+
+    # def init_weights(self, init_w):
+    #         self.fc1.weight.data = fanin_init(self.fc1.weight.data.size())
+    #         self.fc2.weight.data = fanin_init(self.fc2.weight.data.size())
+    #         self.fc3.weight.data.uniform_(-init_w, init_w)
+        ########## END OF YOUR CODE ##########
     def forward(self, inputs):
 
         ########## YOUR CODE HERE (5~10 lines) ##########
         # Define the forward pass your actor network
-        # print("actor forward")
+
         scale=torch.tensor(self.action_space.high-self.action_space.low)
         act_prob=self.ac(inputs)
         return act_prob*scale+torch.tensor(self.action_space.low)
+        # return act_prob
+        ##############################################################
+        # out = self.fc1(inputs)
+        # out = self.relu(out)
+        # out = self.fc2(out)
+        # out = self.relu(out)
+        # out = self.fc3(out)
+        # out = self.tanh(out)
+        # return out
         ########## END OF YOUR CODE ##########
 
 class Critic(nn.Module):
@@ -100,34 +135,56 @@ class Critic(nn.Module):
 
         ########## YOUR CODE HERE (5~10 lines) ##########
         # Construct your own critic network
-        self.state_=nn.Sequential(
-            nn.Linear(num_inputs,hidden_size),
+        # self.input_layer=nn.Sequential(
+        #     nn.Linear(num_inputs,hidden_size),
+        #     nn.ReLU(),
+        # )
+        self.critic_model=nn.Sequential(
+            nn.Linear(num_inputs+num_outputs,hidden_size),
             nn.ReLU(),
-            )
-        self.action_=nn.Sequential(
-            nn.Linear(num_outputs,hidden_size),
+            nn.Linear(hidden_size,hidden_size),
             nn.ReLU(),
-            )
-        self.final=nn.Sequential(
-            nn.Linear(hidden_size*2,hidden_size),
-            nn.ReLU(),
+            # nn.Linear(hidden_size,hidden_size),
+            # nn.ReLU(),
             nn.Linear(hidden_size,1),
         )
+        for idx,m in enumerate(self.modules()):
+            if idx==6:
+                print(m)
+                nn.init.uniform_(m.weight,a=-3e-3,b=3e-3)
+
+
+
+        ##############################################################
+    #     self.fc1 = nn.Linear(num_inputs, hidden_size)
+    #     self.fc2 = nn.Linear(hidden_size+num_outputs, hidden_size)
+    #     self.fc3 = nn.Linear(hidden_size, 1)
+    #     self.relu = nn.ReLU()
+    #     self.init_weights(3e-3)
+    # def init_weights(self, init_w):
+    #         self.fc1.weight.data = fanin_init(self.fc1.weight.data.size())
+    #         self.fc2.weight.data = fanin_init(self.fc2.weight.data.size())
+    #         self.fc3.weight.data.uniform_(-init_w, init_w)
         ########## END OF YOUR CODE ##########
 
     def forward(self, inputs, actions):
 
         ########## YOUR CODE HERE (5~10 lines) ##########
         # Define the forward pass your critic network
-        # print("critic forward")
-        # print(inputs.shape)
-        # print(actions.shape)
-        statelayer=self.state_(inputs)
-        actionlayer=self.action_(actions)
-        state_action=torch.cat((statelayer,actionlayer),dim=1)
+        # kk=self.input_layer(inputs)
+        state_action=torch.cat((inputs,actions),dim=1)
         # print(state_action.shape)
-        Q_value=self.final(state_action)
+        Q_value=self.critic_model(state_action)
         return Q_value ## return Q value for update actor
+
+        ##############################################################
+        # out = self.fc1(inputs)
+        # out = self.relu(out)
+        # # debug()
+        # out = self.fc2(torch.cat([out,actions],1))
+        # out = self.relu(out)
+        # out = self.fc3(out)
+        # return out
         ########## END OF YOUR CODE ##########
 
 
@@ -160,12 +217,13 @@ class DDPG(object):
         ########## YOUR CODE HERE (3~5 lines) ##########
         # Add noise to your action for exploration
         # Clipping might be needed
+
         if action_noise!=None:
             actrion_=mu+torch.tensor(action_noise)
         else :
             actrion_=mu
-        action_prob=torch.clip(actrion_,min=torch.tensor(self.action_space.low),max=torch.tensor(self.action_space.high))  ### 對 Probability 做 clip
-
+        action_prob=torch.clamp(actrion_,min=torch.tensor(self.action_space.low),max=torch.tensor(self.action_space.high))  ### 對 Probability 做 clip
+        # action_prob=torch.clamp(actrion_,min=-2.0,max=2.0)  ### 對 Probability 做 clip
         return action_prob
         ########## END OF YOUR CODE ##########
 
@@ -183,26 +241,24 @@ class DDPG(object):
 
         ### critic update
 
-        self.critic.zero_grad()
-        self.actor.zero_grad()
+        reward_batch=reward_batch.unsqueeze(1)
+        target_Q=reward_batch+self.gamma*self.critic_target(next_state_batch,self.actor_target(next_state_batch)).detach()
 
-        a_=self.actor_target(next_state_batch)
-        # print(a_)
-        y=reward_batch+self.gamma*self.critic_target(next_state_batch,a_)
-        # print(state_batch.dtype)
-        # print(action_batch.dtype)
-        q=self.critic(state_batch,action_batch)
-        # policy_loss=F.mse_loss(y, q) ## policy loss
-        policy_loss=F.huber_loss(y.to(torch.float64), q.to(torch.float64),delta=0.3) ## policy loss
-        # print(policy_loss)
+        Current_Q=self.critic(state_batch,action_batch)
+
+        policy_loss=F.mse_loss(Current_Q.to(torch.float64),target_Q.to(torch.float64)) ## policy loss
+        # policy_loss=F.huber_loss(y.to(torch.float64), q.to(torch.float64),delta=0.5) ## policy loss
+
+        self.critic_optim.zero_grad()
         policy_loss.backward()
         self.critic_optim.step()
 
         ### actor update
-        a=self.actor(state_batch)
-        q=self.critic(state_batch,a)
-        value_loss=-torch.mean(q) ## value loss
-        # print(value_loss)
+
+        value_loss=-self.critic(state_batch,self.actor(state_batch)).mean()# valuee loss
+
+
+        self.actor_optim.zero_grad()
         value_loss.backward()
         self.actor_optim.step()
 
@@ -236,14 +292,14 @@ class DDPG(object):
 
 def train():
     num_episodes = 200
-    gamma = 0.995
-    tau = 0.03
+    gamma = 0.99
+    tau = 0.005
     hidden_size = 128
     noise_scale = 0.3
-    replay_size = 1000000
-    batch_size = 512
-    updates_per_step = 5
-    print_freq = 1
+    replay_size = 50000
+    batch_size = 128
+    updates_per_step =1
+    print_freq = 10
     ewma_reward = 0
     rewards = []
     ewma_reward_history = []
@@ -251,7 +307,7 @@ def train():
     updates = 0
 
 
-    agent = DDPG(env.observation_space.shape[0], env.action_space, gamma, tau, hidden_size)
+    agent = DDPG(env.observation_space.shape[0], env.action_space, gamma, tau, hidden_size, lr_a=3e-4, lr_c=1e-3)
     ounoise = OUNoise(env.action_space.shape[0])
     memory = ReplayMemory(replay_size)
     for i_episode in range(num_episodes):
@@ -268,8 +324,11 @@ def train():
             # 2. Push the sample to the replay buffer
             # 3. Update the actor and the critic
             action = agent.select_action(state,action_noise=ounoise.noise()).numpy()[0]
-            # print(action)
+            # action*=2
             next_state, reward, done, _ = env.step(action)
+
+            # print(next_state)
+            # print(reward)
             reward/=10
             episode_reward+=reward
             next_state=torch.tensor([next_state])
@@ -287,7 +346,7 @@ def train():
                     batch.mask.append(i.mask)
                     batch.next_state.append(i.next_state)
                     batch.reward.append(i.reward)
-                agent.update_parameters(batch)
+                value_loss,policy_loss=agent.update_parameters(batch)
             state=next_state
             if done:
                 break
@@ -321,6 +380,10 @@ def train():
             ewma_reward = 0.05 * episode_reward + (1 - 0.05) * ewma_reward
             ewma_reward_history.append(ewma_reward)
             print("Episode: {}, length: {}, reward: {:.2f}, ewma reward: {:.2f}".format(i_episode, t, rewards[-1], ewma_reward))
+
+            writer.add_scalar("Loss/value_loss",value_loss,i_episode)
+            writer.add_scalar("Loss/Policy_loss",policy_loss,i_episode)
+            writer.add_scalar("Reward/ewma_reward",ewma_reward,i_episode)
 
     agent.save_model('Pendulum-v1', '.pth')
 
