@@ -243,14 +243,14 @@ class DDPG(object):
             self.critic.load_state_dict(torch.load(critic_path))
 
 def train():
-    num_episodes = 1000
+    num_episodes = 2000
     gamma = 0.99
     tau = 0.005
     hidden_size = 128
     noise_scale = 0.3
     replay_size = 50000
-    batch_size = 256
-    updates_per_step =4
+    batch_size = 128
+    updates_per_step =2
     print_freq = 20
     ewma_reward = 0
     rewards = []
@@ -259,7 +259,7 @@ def train():
     updates = 0
     value_loss=0
     policy_loss=0
-    agent = DDPG(env.observation_space.shape[0], env.action_space, gamma, tau, hidden_size, lr_a=3e-4, lr_c=3e-3)
+    agent = DDPG(env.observation_space.shape[0], env.action_space, gamma, tau, hidden_size, lr_a=3e-4, lr_c=3e-4)
     ounoise = OUNoise(env.action_space.shape[0])
     memory = ReplayMemory(replay_size)
     for i_episode in range(num_episodes):
