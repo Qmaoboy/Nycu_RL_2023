@@ -248,8 +248,8 @@ def train():
     tau = 0.005
     hidden_size = 128
     noise_scale = 0.3
-    replay_size = 100000
-    batch_size = 128
+    replay_size = 20000
+    batch_size = 64
     updates_per_step =4
     print_freq = 20
     ewma_reward = 0

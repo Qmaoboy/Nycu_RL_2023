@@ -54,7 +54,7 @@ class ReplayMemory(object):
 
 class OUNoise:
 
-    def __init__(self, action_dimension, scale=0.1, mu=0, theta=0.15, sigma=0.2):
+    def __init__(self, action_dimension, scale=0.1, mu=0, theta=0.2, sigma=0.5):
         self.action_dimension = action_dimension
         self.scale = scale
         self.mu = mu
@@ -248,7 +248,7 @@ def train():
     tau = 0.005
     hidden_size = 128
     noise_scale = 0.3
-    replay_size = 50000
+    replay_size = 20000
     batch_size = 128
     updates_per_step =2
     print_freq = 20
@@ -259,7 +259,7 @@ def train():
     updates = 0
     value_loss=0
     policy_loss=0
-    agent = DDPG(env.observation_space.shape[0], env.action_space, gamma, tau, hidden_size, lr_a=3e-4, lr_c=3e-4)
+    agent = DDPG(env.observation_space.shape[0], env.action_space, gamma, tau, hidden_size, lr_a=3e-4, lr_c=3e-3)
     ounoise = OUNoise(env.action_space.shape[0])
     memory = ReplayMemory(replay_size)
     for i_episode in range(num_episodes):
